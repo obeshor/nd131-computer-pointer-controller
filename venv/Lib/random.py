@@ -714,7 +714,7 @@ def _test_generator(n, func, args):
         smallest = min(x, smallest)
         largest = max(x, largest)
     t1 = time.perf_counter()
-    print(round(t1-t0, 3), 'sec,', end=' ')
+    print(round(t1-t0, 3), 'src,', end=' ')
     avg = total/n
     stddev = _sqrt(sqsum/n - avg*avg)
     print('avg %g, stddev %g, min %g, max %g\n' % \
