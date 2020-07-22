@@ -2,12 +2,11 @@
 This is a sample class for a model. You may choose to use it as-is or make any changes to it.
 This has been provided just to give you an idea of how to structure your model class.
 '''
-from openvino.inference_engine import IENetwork, IECore
 import cv2
+import os
 import numpy as np
-import time
-import logging
-import sys
+import logging as log
+from openvino.inference_engine import IENetwork, IECore
 
 
 class FaceDetection:
@@ -15,94 +14,96 @@ class FaceDetection:
     Class for the Face Detection Model.
     '''
 
-    def __init__(self, model_name, device='CPU', extensions=None):
-
-        self.model_name = model_name
+    def __init__(self, model_name, device, threshold, extensions=None):
+        '''
+        this method is to set instance variables.
+        '''
+        self.model_weights = model_name + '.bin'
+        self.model_structure = model_name + ".xml"
         self.device = device
-        self.extensions = extensions
-        self.plugin = None
-        self.network = None
-        self.exec_net = None
-        self.in_name = None
-        self.in_shape = None
-        self.out_name = None
-        self.out_shape = None
+        self.threshold = threshold
+        self.extension = extensions
+        self.cropped_face_image = None
+        self.first_face_coordinates = None
+        self.faces_coordinates = None
+        self.results = None
+        self.pre_image = None
+        self.net = None
+
+        try:
+            self.model = IENetwork(self.model_structure, self.model_weights)
+        except Exception as e:
+            raise ValueError("Could not Initialise the network. Have you enterred the correct model path?")
+
+        self.input_name = next(iter(self.model.inputs))
+        self.input_shape = self.model.inputs[self.input_name].shape
+        self.output_name = next(iter(self.model.outputs))
+        self.output_shape = self.model.outputs[self.output_name].shape
 
     def load_model(self):
-
         '''
         This method is for loading the model to the device specified by the user.
         If your model requires any Plugins, this is where you can load them.
         '''
+        self.model = IENetwork(self.model_structure, self.model_weights)
+        self.core = IECore()
 
-        model_structure = self.model_name
-        model_weights = self.model_name.split('.')[0] + '.bin'
+        supported_layers = self.core.query_network(network=self.model, device_name=self.device)
+        unsupported_layers = [R for R in self.model.layers.keys() if R not in supported_layers]
 
-        self.plugin = IECore()
+        if len(unsupported_layers) != 0:
+            log.error("Unsupported layers found ...")
+            log.error("Adding specified extension")
+            self.core.add_extension(self.extension, self.device)
+            supported_layers = self.core.query_network(network=self.model, device_name=self.device)
+            unsupported_layers = [R for R in self.model.layers.keys() if R not in supported_layers]
+            if len(unsupported_layers) != 0:
+                log.error("ERROR: There are still unsupported layers after adding extension...")
+                exit(1)
+        self.net = self.core.load_network(network=self.model, device_name=self.device, num_requests=1)
 
-        if self.extensions and 'CPU' in self.device:
-            self.plugin.add_extension(self.extensions, self.device)
+    def predict(self, image):
+        '''
+        This method is meant for running predictions on the input image.
+        '''
 
-        self.network = IENetwork(model=model_structure, weights=model_weights)
+        self.pre_image = self.preprocess_input(image)
+        self.results = self.net.infer({self.input_name: self.pre_image})
+        self.faces_coordinates = self.preprocess_output(self.results, image)
 
-        self.check_model()
-
-        self.exec_net = self.plugin.load_network(network=self.network, device_name=self.device, num_requests=1)
-
-        self.in_name = next(iter(self.network.inputs))
-        self.in_shape = self.network.inputs[self.in_name].shape
-
-        self.out_name = next(iter(self.network.outputs))
-        self.out_shape = self.network.outputs[self.out_name].shape
-
-    def predict(self, image, prob_threshold):
-
-        processed_image = self.preprocess_input(image.copy())
-        outputs = self.exec_net.infer({self.in_name: processed_image})
-        coord = self.preprocess_output(outputs, prob_threshold)
-
-        if (len(coord) == 0):
+        if len(self.faces_coordinates) == 0:
+            log.error("No Face is detected, Next frame will be processed..")
             return 0, 0
 
-        coord = coord[0]
+        self.first_face_coordinates = self.faces_coordinates[0]
+        cropped_face_image = image[self.first_face_coordinates[1]:self.first_face_coordinates[3],
+                             self.first_face_coordinates[0]:self.first_face_coordinates[2]]
 
-        height = image.shape[0]
-        width = image.shape[1]
-
-        coord = coord * np.array([width, height, width, height])
-        coord = coord.astype(np.int32)
-
-        face = image[coord[1]:coord[3], coord[0]:coord[2]]
-        return face, coord
+        return self.first_face_coordinates, cropped_face_image
 
     def check_model(self):
-
-        if self.device == "CPU":
-            supported_layers = self.plugin.query_network(network=self.network, device_name=self.device)
-            notsupported_layers = [l for l in self.network.layers.keys() if l not in supported_layers]
-
-            if len(notsupported_layers) != 0:
-                logging.error("[ERROR] Unsupported layers found: {}".format(notsupported_layers))
-                sys.exit(1)
+        pass
 
     def preprocess_input(self, image):
+        '''
+        Before feeding the data into the model for inference,
+        you might have to preprocess it. This method is where you can do that.
+        '''
+        pre_frame = cv2.resize(image, (self.input_shape[3], self.input_shape[2]))
+        pre_frame = pre_frame.transpose((2, 0, 1))
+        pre_frame = pre_frame.reshape(1, *pre_frame.shape)
 
-        image_processed = cv2.resize(image, (self.in_shape[3], self.in_shape[2]))
-        image_processed = image_processed.transpose(2, 0, 1)
-        image_processed = image_processed.reshape(1, *image_processed.shape)
-        return image_processed
+        return pre_frame
 
-    def preprocess_output(self, outputs, prob_threshold):
-
-        coord = []
-        outs = outputs[self.out_name][0][0]
-        for out in outs:
-            conf = out[2]
-            if conf > prob_threshold:
-                x_min = out[3]
-                y_min = out[4]
-                x_max = out[5]
-                y_max = out[6]
-                coord.append([x_min, y_min, x_max, y_max])
-        return coord
-
+    def preprocess_output(self, outputs, image):
+        faces_coordinates = []
+        outs = outputs[self.output_name][0][0]
+        for box in outs:
+            conf = box[2]
+            if conf >= self.threshold:
+                xmin = int(box[3] * image.shape[1])
+                ymin = int(box[4] * image.shape[0])
+                xmax = int(box[5] * image.shape[1])
+                ymax = int(box[6] * image.shape[0])
+                faces_coordinates.append([xmin, ymin, xmax, ymax])
+        return faces_coordinates
