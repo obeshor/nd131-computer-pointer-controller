@@ -27,7 +27,7 @@ The flow of data look like this:
    
 * Install dependencies
 
-  `python -m pip install -r requirements.txt`
+  `pip install -r requirements.txt`
 
 * Initialize OpenVINO environment
 

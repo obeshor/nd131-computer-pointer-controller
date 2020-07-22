@@ -1,108 +1,97 @@
-'''
-This is a sample class for a model. You may choose to use it as-is or make any changes to it.
-This has been provided just to give you an idea of how to structure your model class.
-'''
-from openvino.inference_engine import IENetwork, IECore
 import cv2
-import pprint
 import numpy as np
-import time
-import logging
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+import logging as log
+from openvino.inference_engine import IENetwork, IECore
+import math
 
 
 class GazeEstimation:
     '''
-    Class for the Face Detection Model.
+    Class for the Gaze Estimation Model.
     '''
+
     def __init__(self, model_name, device='CPU', extensions=None):
         '''
-        TODO: Use this to set your instance variables.
+        this method is to set instance variables.
         '''
-        self.model_weights = model_name + '.xml'
-        self.model_structure = model_name + '.bin'
+        self.model_weights = model_name + '.bin'
+        self.model_structure = model_name + '.xml'
         self.device = device
-        self.net = None
+        self.extension = extensions
 
-        return
+        try:
+            self.model = IENetwork(self.model_structure, self.model_weights)
+        except Exception as e:
+            raise ValueError("Could not Initialise the network. Have you enterred the correct model path?")
 
-        raise NotImplementedError
+        self.input_name = next(iter(self.model.inputs))
+        # self.input_shape = self.model.inputs[self.input_name['left_eye_image']].shape
+        self.output_name = next(iter(self.model.outputs))
+        self.output_shape = self.model.outputs[self.output_name].shape
 
     def load_model(self):
         '''
-        TODO: You will need to complete this method.
         This method is for loading the model to the device specified by the user.
         If your model requires any Plugins, this is where you can load them.
         '''
-        core = IECore()
-        start = time.time()
-        logger.info('Loading the Gaze Estimation Model...')
-        model = core.read_network(self.model_weights, self.model_structure)
-        self.net = core.load_network(network=model, device_name='CPU', num_requests=1)
-        logger.info('Time taken to load the model is: {:.4f} seconds'.format(time.time()-start))
+        self.model = IENetwork(self.model_structure, self.model_weights)
+        self.core = IECore()
+        supported_layers = self.core.query_network(network=self.model, device_name=self.device)
+        unsupported_layers = [R for R in self.model.layers.keys() if R not in supported_layers]
 
-        return self.net
+        if len(unsupported_layers) != 0:
+            log.error("Unsupported layers found ...")
+            log.error("Adding specified extension")
+            self.core.add_extension(self.extension, self.device)
+            supported_layers = self.core.query_network(network=self.model, device_name=self.device)
+            unsupported_layers = [R for R in self.model.layers.keys() if R not in supported_layers]
+            if len(unsupported_layers) != 0:
+                log.error("ERROR: There are still unsupported layers after adding extension...")
+                exit(1)
+        self.net = self.core.load_network(network=self.model, device_name=self.device, num_requests=1)
 
-        raise NotImplementedError
-
-    def predict(self, right_eye, left_eye, head_angles, results):
+    def predict(self, left_eye_image, right_eye_image, head_pose_output):
         '''
-        TODO: You will need to complete this method.
         This method is meant for running predictions on the input image.
         '''
-        pp = pprint.PrettyPrinter()
-        right, left, angles = self.preprocess_input(right_eye, left_eye, head_angles)
-        input_dict = {'right_eye_image': right, 'left_eye_image': left, 'head_pose_angles': angles}
-        start = time.time()
-        infer = self.net.start_async(request_id=0, inputs=input_dict)
-        if self.net.requests[0].wait(-1) == 0:
-            results = self.net.requests[0].outputs['gaze_vector']
-            if results == 'yes':
-                logger.info('Gaze Estimation Model Inference speed is: {:.3f} fps'.format(1 / (time.time() - start)))
-                logger.info("Gaze Estimation Model Layers performance counts results")
-                pp.pprint(infer.get_perf_counts())
+        self.left_eye_pre_image, self.right_eye_pre_image = self.preprocess_input(left_eye_image, right_eye_image)
+        self.results = self.net.infer(
+            inputs={'left_eye_image': self.left_eye_pre_image, 'right_eye_image': self.right_eye_pre_image,
+                    'head_pose_angles': head_pose_output})
+        self.mouse_coordinate, self.gaze_vector = self.preprocess_output(self.results, head_pose_output)
 
-        return self.preprocess_output(results)
-
-        raise NotImplementedError
+        return self.mouse_coordinate, self.gaze_vector
 
     def check_model(self):
-        output_name = next(iter(self.net.outputs))
-        output_shape = self.net.outputs[output_name].shape
+        pass
 
-        return self.net.inputs, output_name, output_shape
-
-        raise NotImplementedError
-
-    def preprocess_input(self, right_eye, left_eye, angles):
+    def preprocess_input(self, left_eye_image, right_eye_image):
         '''
         Before feeding the data into the model for inference,
         you might have to preprocess it. This function is where you can do that.
         '''
-        if right_eye.any() and left_eye.any():
-            right_eye = cv2.resize(right_eye, (60, 60), interpolation=cv2.INTER_AREA)
-            right_eye = right_eye.transpose((2, 0, 1))
-            right_eye = right_eye.reshape(1, *right_eye.shape)
 
-            left_eye = cv2.resize(left_eye, (60, 60), interpolation=cv2.INTER_AREA)
-            left_eye = left_eye.transpose((2, 0, 1))
-            left_eye = left_eye.reshape(1, *left_eye.shape)
+        left_eye_pre_image = cv2.resize(left_eye_image, (60, 60))
+        left_eye_pre_image = left_eye_pre_image.transpose((2, 0, 1))
+        left_eye_pre_image = left_eye_pre_image.reshape(1, *left_eye_pre_image.shape)
 
-            angles = np.array([angles[0], angles[1], angles[2]])
-            angles = angles.reshape(1, 3)
+        right_eye_pre_image = cv2.resize(right_eye_image, (60, 60))
+        right_eye_pre_image = right_eye_pre_image.transpose((2, 0, 1))
+        right_eye_pre_image = right_eye_pre_image.reshape(1, *right_eye_pre_image.shape)
 
-        return right_eye, left_eye, angles
+        return left_eye_pre_image, right_eye_pre_image
 
-        raise NotImplementedError
-
-    def preprocess_output(self, outputs):
+    def preprocess_output(self, outputs, head_pose_estimation_output):
         '''
         Before feeding the output of this model to the next model,
         you might have to preprocess the output. This function is where you can do that.
         '''
+        roll_value = head_pose_estimation_output[2]
+        outputs = outputs[self.output_name][0]
+        cos_theta = math.cos(roll_value * math.pi / 180)
+        sin_theta = math.sin(roll_value * math.pi / 180)
 
-        return outputs
+        x_value = outputs[0] * cos_theta + outputs[1] * sin_theta
+        y_value = outputs[1] * cos_theta - outputs[0] * sin_theta
 
-        raise NotImplementedError
+        return (x_value, y_value), outputs

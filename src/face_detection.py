@@ -3,13 +3,11 @@ This is a sample class for a model. You may choose to use it as-is or make any c
 This has been provided just to give you an idea of how to structure your model class.
 '''
 from openvino.inference_engine import IENetwork, IECore
-import pprint
 import cv2
+import numpy as np
 import time
 import logging
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+import sys
 
 
 class FaceDetection:
@@ -18,103 +16,93 @@ class FaceDetection:
     '''
 
     def __init__(self, model_name, device='CPU', extensions=None):
-        '''
-        TODO: Use this to set your instance variables.
-        '''
-        self.model_weights = model_name + '.xml'
-        self.model_structure = model_name + '.bin'
+
+        self.model_name = model_name
         self.device = device
-        self.net = None
-        self.count = 0
-
-        return
-
-        raise NotImplementedError
+        self.extensions = extensions
+        self.plugin = None
+        self.network = None
+        self.exec_net = None
+        self.in_name = None
+        self.in_shape = None
+        self.out_name = None
+        self.out_shape = None
 
     def load_model(self):
 
         '''
-        TODO: You will need to complete this method.
         This method is for loading the model to the device specified by the user.
         If your model requires any Plugins, this is where you can load them.
         '''
 
-        core = IECore()
-        start = time.time()
-        model = core.read_network(self.model_weights, self.model_structure)
-        logger.info("Loading the Face Detection Model...")
-        self.net = core.load_network(network=model, device_name='CPU', num_requests=1)
-        logger.info('Time taken to load the model is: {:.4f} seconds'.format(time.time() - start))
+        model_structure = self.model_name
+        model_weights = self.model_name.split('.')[0] + '.bin'
 
-        return
+        self.plugin = IECore()
 
-        raise NotImplementedError
+        if self.extensions and 'CPU' in self.device:
+            self.plugin.add_extension(self.extensions, self.device)
 
-    def predict(self, image, perf):
-        '''
-        TODO: You will need to complete this method.
-        This method is meant for running predictions on the input image.
-        '''
-        pp = pprint.PrettyPrinter(indent=4)
-        processed_image = self.preprocess_input(image)
-        input_name, input_shape, output_name, output_shape = self.check_model()
-        input_dict = {input_name: processed_image}
-        start = time.time()
-        infer = self.net.start_async(request_id=0, inputs=input_dict)
-        self.count += 1
-        if self.net.requests[0].wait(-1) == 0:
-            results = self.net.requests[0].outputs[output_name]
+        self.network = IENetwork(model=model_structure, weights=model_weights)
 
-            if perf == 'yes':
-                logger.info('Face Detection Model Inference speed is: {:.3f} fps'.format(1 / (time.time() - start)))
-                logger.info('Layers Performance counts:')
-                pp.pprint(infer.get_perf_counts())
+        self.check_model()
 
-        return results
+        self.exec_net = self.plugin.load_network(network=self.network, device_name=self.device, num_requests=1)
 
-        raise NotImplementedError
+        self.in_name = next(iter(self.network.inputs))
+        self.in_shape = self.network.inputs[self.in_name].shape
+
+        self.out_name = next(iter(self.network.outputs))
+        self.out_shape = self.network.outputs[self.out_name].shape
+
+    def predict(self, image, prob_threshold):
+
+        processed_image = self.preprocess_input(image.copy())
+        outputs = self.exec_net.infer({self.in_name: processed_image})
+        coord = self.preprocess_output(outputs, prob_threshold)
+
+        if (len(coord) == 0):
+            return 0, 0
+
+        coord = coord[0]
+
+        height = image.shape[0]
+        width = image.shape[1]
+
+        coord = coord * np.array([width, height, width, height])
+        coord = coord.astype(np.int32)
+
+        face = image[coord[1]:coord[3], coord[0]:coord[2]]
+        return face, coord
 
     def check_model(self):
-        input_name = next(iter(self.net.inputs))
-        input_shape = self.net.inputs[input_name].shape
-        output_name = next(iter(self.net.outputs))
-        output_shape = self.net.outputs[output_name].shape
 
-        return input_name, input_shape, output_name, output_shape
+        if self.device == "CPU":
+            supported_layers = self.plugin.query_network(network=self.network, device_name=self.device)
+            notsupported_layers = [l for l in self.network.layers.keys() if l not in supported_layers]
 
-        raise NotImplementedError
+            if len(notsupported_layers) != 0:
+                logging.error("[ERROR] Unsupported layers found: {}".format(notsupported_layers))
+                sys.exit(1)
 
     def preprocess_input(self, image):
-        '''
-        Before feeding the data into the model for inference,
-        you might have to preprocess it. This function is where you can do that.
-        '''
-        input_name, input_shape, output_name, output_shape = self.check_model()
-        image = cv2.resize(image, (input_shape[3], input_shape[2]), interpolation=cv2.INTER_AREA)
-        image = image.transpose((2, 0, 1))
-        image = image.reshape(1, *image.shape)
 
-        return image
+        image_processed = cv2.resize(image, (self.in_shape[3], self.in_shape[2]))
+        image_processed = image_processed.transpose(2, 0, 1)
+        image_processed = image_processed.reshape(1, *image_processed.shape)
+        return image_processed
 
-        raise NotImplementedError
+    def preprocess_output(self, outputs, prob_threshold):
 
-    def preprocess_output(self, image, perf):
-        '''
-        Before feeding the output of this model to the next model,
-        you might have to preprocess the output. This function is where you can do that.
-        '''
-        outputs = self.predict(image, perf)
-        h, w, c = image.shape
-        for character in (outputs[0][0]):
-            if character[2] > 0.6:
-                x_min = int(w * character[3])
-                y_min = int(h * character[4])
-                x_max = int(w * character[5])
-                y_max = int(h * character[6])
-                crop = image[y_min - 40:y_max + 40, x_min - 50:x_max + 50]
-                if perf == 'yes':
-                    image = cv2.resize(image, (720, 480), interpolation=cv2.INTER_AREA)
-                    image = cv2.rectangle(image, (x_min, y_min), (x_max, y_max), (0, 255, 0), 1)
-                    cv2.imshow('Face Detection Results', image)
-                return crop
+        coord = []
+        outs = outputs[self.out_name][0][0]
+        for out in outs:
+            conf = out[2]
+            if conf > prob_threshold:
+                x_min = out[3]
+                y_min = out[4]
+                x_max = out[5]
+                y_max = out[6]
+                coord.append([x_min, y_min, x_max, y_max])
+        return coord
 
