@@ -99,8 +99,8 @@ The bin folder contains the demo video file, the models folder contains all the 
  ┃ ┗ 📜mouse_controller.py
  ┃ 
  ┣ 📜README.md
- ┣ 📜requirements.txt
- ┗ 📜vtune_cpu_script.sh
+ ┣ 📜models.txt
+ ┗ 📜requirements.txt
 ```
     
 ## Demo
