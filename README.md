@@ -154,15 +154,8 @@ Argument|Type|Description
 | *Total FPS*      | 1.245678fps | 2.67456fps | 2.134785fps |
 
 ## Results
-*TODO:* Discuss the benchmark results and explain why you are getting the results you are getting. For instance, explain why there is difference in inference time for FP32, FP16 and INT8 models.
+We notice the models with low precisions generally tend to give better inference time, but it still difficult to give an exact measures as the time spent depend of the performance of the machine used in that given time when running the application. Also we notice that there isn't a big difference between the same model with different precisions.
 
-As we can see from the results, models with lower precision gives us better inference time but they lose in accuracy. This happens as lower precision model uses less memory and they are less computationally expensive.
+The models with low precisions are more lightweight than the models with high precisons, so this makes the execution of the network more fast.
 
-## Stand Out Suggestions
-This is where you can provide information about the stand out suggestions that you have attempted.
-
-### Async Inference
-If you have used Async Inference in your code, benchmark the results and explain its effects on power and performance of your project.
-
-### Edge Cases
-There will be certain situations that will break your inference flow. For instance, lighting changes or multiple people in the frame. Explain some of the edge cases you encountered in your project and how you solved them to make your project more robust.
+As the above collected results shows that the models with low precisons take much time for loading than models with higher precisions with a difference that could reach 0.1 ms.
