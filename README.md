@@ -143,15 +143,15 @@ Argument|Type|Description
 
 ## Benchmarks
  Include the benchmark results of running your model on multiple hardwares and multiple model precisions. Your benchmarks can include: model loading time, input/output processing time, model inference time etc.
- The Performance tests were run on HP Laptop with **Intel i7-8565U 1.99Ghz** and **16 GB Ram**
+ The Performance tests were run on HP Laptop with **Intel i5-450M 2.40Ghz** and **16 GB Ram**
 
 #### CPU
 
 | Properties       | FP32        | FP16        | INT8        |
 | ---------------- | ----------- | ----------- | ----------- |
-| *Model Loading*  | 2.864384s   | 2.834568s   | 2.881543s   |
-| *Inference Time* | 9.084232s   | 9.002353s   | 9.015497s   |
-| *Total FPS*      | 1.245678fps | 2.67456fps | 2.134785fps |
+| *Model Loading*  | 2.864s      | 2.845s      | 2.881s      |
+| *Inference Time* | 9.0842s     | 9.002s      | 9.015s      |
+| *Total FPS*      | 1.245fps    | 2.665fps    | 2.135fps    |
 
 ## Results
 We notice the models with low precisions generally tend to give better inference time, but it still difficult to give an exact measures as the time spent depend of the performance of the machine used in that given time when running the application. Also we notice that there isn't a big difference between the same model with different precisions.
