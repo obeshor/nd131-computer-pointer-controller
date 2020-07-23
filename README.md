@@ -32,6 +32,7 @@ The flow of data look like this:
 * Initialize OpenVINO environment
 
   `cd C:\Program Files (x86)\IntelSWTools\openvino\bin\`
+  
   `setupvars.bat`
   
  * Download models

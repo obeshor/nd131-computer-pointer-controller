@@ -132,10 +132,7 @@ def main():
                    'head_pose_estimation_model': args.head_pose_model,
                    'gaze_estimation_model': args.gaze_estimation_model}
 
-    for model_path in list(model_paths.values()):
-        if not os.path.isfile(model_paths):
-            log.error("Unable to find specified model file" + str(model_path))
-            exit(1)
+
 
     # Instantiate model
     face_model = FaceDetection(model_name=model_paths['Face_detection_model'],
