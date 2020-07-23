@@ -135,6 +135,7 @@ Argument|Type|Description
 -hp| Required | Path to a head pose estimation model xml file with a trained model.
 -ge| Required | Path to a gaze estimation model xml file with a trained model.
 -i| Required | Path to image or video file or WEBCAM.
+-o| Optional | Specify path of output folder where we will store result.
 -l| Optional | Absolute path to a shared library with the kernels impl.
 -pt  | Optional | Specify confidence threshold which the value here in range(0, 1), default=0.5
 -flag  | Optional | for see the visualization of different model outputs of each frame.
