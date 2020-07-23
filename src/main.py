@@ -3,6 +3,7 @@ import os
 import numpy as np
 import logging as log
 import time
+import math
 from src.face_detection import FaceDetection
 from src.facial_landmarks_detection import FacialLandmarksDetection
 from src.gaze_estimation import GazeEstimation
@@ -10,8 +11,6 @@ from src.head_pose_estimation import HeadPoseEstimation
 from src.mouse_controller import MouseController
 from argparse import ArgumentParser
 from src.input_feeder import InputFeeder
-import math
-
 
 def build_argparser():
     """
@@ -31,7 +30,7 @@ def build_argparser():
                         help="Path to image or video file or CAM")
     parser.add_argument("-l", "--cpu_extension", required=False, type=str,
                         default=None,
-                        help="MKLDNN (CPU)-targeted custom layers."
+                        help="(CPU)-targeted custom layers."
                              "Absolute path to a shared library with the"
                              "kernels impl.")
     parser.add_argument("-d", "--device", type=str, default="CPU",
@@ -41,13 +40,14 @@ def build_argparser():
                              "specified (CPU by default)")
     parser.add_argument("-pt", "--prob_threshold", type=float, default=0.5,
                         help="Probability threshold for detections filtering"
-                             "(0.5 by default)")
+                             "(0.6 by default)")
     parser.add_argument("-flag", "--visualization_flag", required=False, nargs='+',
                         default=[],
                         help="Example: --flag fd fl hp ge (Seperate each flag by space)"
                              "for see the visualization of different model outputs of each frame,"
                              "fd for Face Detection Model, fl for Facial Landmark Detection Model"
                              "hp for Head Pose Estimation Model, ge for Gaze Estimation Model.")
+    parser.add_argument("-o", '--output_path', default='/results/', type=str)
     return parser
 
 
@@ -68,7 +68,7 @@ def draw_axes(frame, center_of_face, yaw, pitch, roll, scale, focal_length):
                     [0, 0, 1]])
 
     r = r_z @ r_y @ r_x
-    camera_matrix = build_camera_matrix(center_of_face, focal_length)
+    camera_matrix = build_matrix(center_of_face, focal_length)
     xaxis = np.array(([1 * scale, 0, 0]), dtype='float32').reshape(3, 1)
     yaxis = np.array(([0, -1 * scale, 0]), dtype='float32').reshape(3, 1)
     zaxis = np.array(([0, 0, -1 * scale]), dtype='float32').reshape(3, 1)
@@ -98,7 +98,7 @@ def draw_axes(frame, center_of_face, yaw, pitch, roll, scale, focal_length):
     return frame
 
 
-def build_camera_matrix(center_of_face, focal_length):
+def build_matrix(center_of_face, focal_length):
     cx = int(center_of_face[0])
     cy = int(center_of_face[1])
     camera_matrix = np.zeros((3, 3), dtype='float32')
@@ -114,8 +114,10 @@ def main():
     # command line args
     args = build_argparser().parse_args()
     input_file_path = args.input
+    output_path = args.output_path
+    prob_threshold = args.prob_threshold
     logger_object = log.getLogger()
-    oneneneflags = args.visualization_flag
+    preview_flags = args.visualization_flag
     if input_file_path == "CAM":
         input_feeder = InputFeeder("cam")
     else:
@@ -124,42 +126,63 @@ def main():
             exit(1)
         input_feeder = InputFeeder("video", input_file_path)
 
+    # Initialize variables with the input arguments for easy access
     model_paths = {'Face_detection_model': args.face_detection_model,
                    'Facial_landmarks_detection_model': args.facial_landmarks_model,
                    'head_pose_estimation_model': args.head_pose_model,
                    'gaze_estimation_model': args.gaze_estimation_model}
 
-    face_detection_model_object = FaceDetection(model_name=model_paths['Face_detection_model'],
+    for model_path in list(model_paths.values()):
+        if not os.path.isfile(model_paths):
+            log.error("Unable to find specified model file" + str(model_path))
+            exit(1)
+
+    # Instantiate model
+    face_model = FaceDetection(model_name=model_paths['Face_detection_model'],
                                                           device=args.device, threshold=args.prob_threshold,
                                                           extensions=args.cpu_extension)
 
-    facial_landmarks_detection_model_object = FacialLandmarksDetection(
+    landmark_model = FacialLandmarksDetection(
         model_name=model_paths['Facial_landmarks_detection_model'],
         device=args.device, extensions=args.cpu_extension)
 
-    gaze_estimation_model_object = GazeEstimation(
+    gaze_model = GazeEstimation(
         model_name=model_paths['gaze_estimation_model'], device=args.device, extensions=args.cpu_extension)
-    head_pose_estimation_model_object = HeadPoseEstimation(
+    head_pose_model = HeadPoseEstimation(
         model_name=model_paths['head_pose_estimation_model'], device=args.device, extensions=args.cpu_extension)
     mouse_controller_object = MouseController('medium', 'fast')
+
+    # Load Models
     start_time = time.time()
-    face_detection_model_object.load_model()
+    face_model.load_model()
     logger_object.error("Face detection model loaded: time: {:.3f} ms".format((time.time() - start_time) * 1000))
     first_mark = time.time()
-    facial_landmarks_detection_model_object.load_model()
+    landmark_model.load_model()
     logger_object.error(
         "Facial landmarks detection model loaded: time: {:.3f} ms".format((time.time() - first_mark) * 1000))
     second_mark = time.time()
-    head_pose_estimation_model_object.load_model()
+    head_pose_model.load_model()
     logger_object.error("Head pose estimation model loaded: time: {:.3f} ms".format((time.time() - second_mark) * 1000))
     third_mark = time.time()
-    gaze_estimation_model_object.load_model()
+    gaze_model.load_model()
     logger_object.error("Gaze estimation model loaded: time: {:.3f} ms".format((time.time() - third_mark) * 1000))
     load_total_time = time.time() - start_time
     logger_object.error("Total loading time: time: {:.3f} ms".format(load_total_time * 1000))
     logger_object.error("All models are loaded successfully..")
     input_feeder.load_data()
     logger_object.error("Input feeder are loaded")
+
+    # Check extention of these unsupported layers
+    face_model.check_model()
+    landmark_model.check_model()
+    head_pose_model.check_model()
+    gaze_model.check_model()
+
+    width = int(input_feeder.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(input_feeder.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = int(input_feeder.cap.get(cv2.CAP_PROP_FPS))
+    out_video = cv2.VideoWriter(os.path.join('output_video.mp4'), cv2.VideoWriter_fourcc(*'avc1'), fps,
+                                (width, height), True)
 
     counter = 0
     start_inf_time = time.time()
@@ -169,59 +192,65 @@ def main():
             break
         pressed_key = cv2.waitKey(60)
         counter = counter + 1
-        face_coordinates, face_image = face_detection_model_object.predict(frame.copy())
 
-        if face_coordinates == 0:
+        face_image, face_coordinates = face_model.predict(frame.copy(), prob_threshold)
+
+        if type(face_image) == int:
+            log.error("Unable to detect the face.")
+            if pressed_key == 27:
+                break
             continue
 
-        head_pose_estimation_model_output = head_pose_estimation_model_object.predict(face_image)
+        head_pose_estimation_model_output = head_pose_model.predict(face_image)
 
-        left_eye_image, right_eye_image, eye_coord = facial_landmarks_detection_model_object.predict(face_image)
+        left_eye_image, right_eye_image, eye_coord = landmark_model.predict(face_image)
 
-        mouse_coordinate, gaze_vector = gaze_estimation_model_object.predict(left_eye_image, right_eye_image,
+        mouse_coordinate, gaze_vector = gaze_model.predict(left_eye_image, right_eye_image,
                                                                              head_pose_estimation_model_output)
 
-        if len(oneneneflags) != 0:
+        if len(preview_flags) != 0:
             preview_window = frame.copy()
-            if 'fd' in oneneneflags:
-                if len(oneneneflags) != 1:
+            if 'fd' in preview_flags:
+                if len(preview_flags) != 1:
                     preview_window = face_image
+
                 else:
                     cv2.rectangle(preview_window, (face_coordinates[0], face_coordinates[1]),
-                                  (face_coordinates[2], face_coordinates[3]), (0, 150, 0), 3)
-            if 'fl' in oneneneflags:
-                if not 'fd' in oneneneflags:
+                                  (face_coordinates[2], face_coordinates[3]), (255, 0, 0), 3)
+            if 'fl' in preview_flags:
+                if not 'fd' in preview_flags:
                     preview_window = face_image.copy()
                 cv2.rectangle(preview_window, (eye_coord[0][0], eye_coord[0][1]), (eye_coord[0][2], eye_coord[0][3]),
-                              (150, 0, 150))
+                              (255, 0, 250))
                 cv2.rectangle(preview_window, (eye_coord[1][0], eye_coord[1][1]), (eye_coord[1][2], eye_coord[1][3]),
-                              (150, 0, 150))
-            if 'hp' in oneneneflags:
+                              (255, 0, 255))
+            if 'hp' in preview_flags:
                 cv2.putText(preview_window,
-                            "yaw:{:.1f} | pitch:{:.1f} | roll:{:.1f}".format(head_pose_estimation_model_output[0],
+                            "yaw:{:.2f} | pitch:{:.2f} | roll:{:.2f}".format(head_pose_estimation_model_output[0],
                                                                              head_pose_estimation_model_output[1],
                                                                              head_pose_estimation_model_output[2]),
-                            (20, 20), cv2.FONT_HERSHEY_COMPLEX, 0.35, (0, 0, 0), 1)
-            if 'ge' in oneneneflags:
-
+                            (20, 40), cv2.FONT_HERSHEY_COMPLEX, 0.35, (255, 0, 255), 2)
+            if 'ge' in preview_flags:
                 yaw = head_pose_estimation_model_output[0]
                 pitch = head_pose_estimation_model_output[1]
                 roll = head_pose_estimation_model_output[2]
                 focal_length = 950.0
                 scale = 50
                 center_of_face = (face_image.shape[1] / 2, face_image.shape[0] / 2, 0)
-                if 'fd' in oneneneflags or 'fl' in oneneneflags:
+                if 'fd' in preview_flags or 'fl' in preview_flags:
                     draw_axes(preview_window, center_of_face, yaw, pitch, roll, scale, focal_length)
                 else:
                     draw_axes(frame, center_of_face, yaw, pitch, roll, scale, focal_length)
 
-        if len(oneneneflags) != 0:
-            img_hor = np.hstack((cv2.resize(frame, (500, 500)), cv2.resize(preview_window, (500, 500))))
+        if len(preview_flags) != 0:
+            image = np.hstack((cv2.resize(frame, (500, 500)), cv2.resize(preview_window, (500, 500))))
         else:
-            img_hor = cv2.resize(frame, (500, 500))
+            image = cv2.resize(frame, (500, 500))
 
-        cv2.imshow('Visualization', img_hor)
-        mouse_controller_object.move(mouse_coordinate[0], mouse_coordinate[1])
+        cv2.imshow('Visualization', image)
+        out_video.write(frame)
+        if counter % 5 == 0:
+            mouse_controller_object.move(mouse_coordinate[0], mouse_coordinate[1])
 
         if pressed_key == 27:
             logger_object.error("exit key is pressed..")
@@ -237,8 +266,9 @@ def main():
         f.write(str(fps) + '\n')
         f.write(str(load_total_time) + '\n')
 
-    input_feeder.close()
+    log.info('Video stream ended')
     cv2.destroyAllWindows()
+    input_feeder.close()
 
 
 if __name__ == '__main__':
