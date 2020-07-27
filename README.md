@@ -145,13 +145,20 @@ Argument|Type|Description
 
 | Properties  | FP32        | FP16        | INT8        |
 | ------------| ----------- | ----------- | ----------- |
-|Model Loading| 2.864s      | 2.845s      | 2.881s      |
-|Infer Time   | 9.0842s     | 9.002s      | 9.015s      |
-|FPS          | 1.245fps    | 2.665fps    | 2.135fps    |
+|Model Loading| 0.84s       | 1.17s       | 1.19s       |
+|Infer Time   | 83.80s      | 23.12s      | 42.21s      |
+|FPS          | 0.70fps     | 0.60fps     | 1.39fps     |
+
+
+| Models        | FP32 -INT1  | FP16        | INT8        |
+| --------------| ----------- | ----------- | ----------- |
+|Face detection | 0.428s      | -           | -           |
+|facial landmark| 0.114s      | 0.105s      | 0.101s      |
+|Head pose      | 0.149S      | 0.176s      | 0.129s      |
+|Gaze estimation| 0.178S      | 0.179s      | 0.161s      |
 
 ## Results
-We notice the models with low precisions generally tend to give better inference time, but it still difficult to give an exact measures as the time spent depend of the performance of the machine used in that given time when running the application. Also we notice that there isn't a big difference between the same model with different precisions.
+We notice the models with low precisions generally tend to give better inference time, but it still difficult to give an exact measures as the time spent depend of the performance of the machine used in that given time when running the application. Also we notice that there is a difference between the same model with different precisions.
 
 The models with low precisions are more lightweight than the models with high precisons, so this makes the execution of the network more fast.
 
-As the above collected results shows that the models with low precisons take much time for loading than models with higher precisions with a difference that could reach 0.1 ms.
