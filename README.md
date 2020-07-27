@@ -50,23 +50,13 @@ The bin folder contains the demo video file, the models folder contains all the 
  ┃ ┣ 📜demo.mp4
  ┃
  ┣ 📂venv
- ┃ ┣ 📂bin
- ┃   ┣ 📜activate
- ┃   ┣ 📜activate.fish
- ┃    
+ ┃     
  ┣ 📂models
  ┃ ┗ 📂intel
  ┃   ┣ 📂face-detection-adas-0001
- ┃   ┃ ┣ 📂FP16
+ ┃   ┃ ┣ 📂INT1
  ┃   ┃ ┃ ┣ 📜face-detection-adas-0001.bin
  ┃   ┃ ┃ ┗ 📜face-detection-adas-0001.xml
- ┃   ┃ ┗ 📂FP32
- ┃   ┃   ┣ 📜face-detection-adas-0001.bin
- ┃   ┃   ┗ 📜face-detection-adas-0001.xml
- ┃   ┣ 📂face-detection-adas-binary-0001
- ┃   ┃ ┗ 📂INT1
- ┃   ┃   ┣ 📜face-detection-adas-binary-0001.bin
- ┃   ┃   ┗ 📜face-detection-adas-binary-0001.xml
  ┃   ┣ 📂gaze-estimation-adas-0002
  ┃   ┃ ┣ 📂FP16
  ┃   ┃ ┃ ┣ 📜gaze-estimation-adas-0002.bin
@@ -88,16 +78,17 @@ The bin folder contains the demo video file, the models folder contains all the 
  ┃     ┗ 📂FP32
  ┃       ┣ 📜landmarks-regression-retail-0009.bin
  ┃       ┗ 📜landmarks-regression-retail-0009.xml
- ┣ 📂results
- ┃ ┗ 📜stats.txt
+ ┣ 
  ┣ 📂src  
+ ┃ ┣ 📜download_models.py
  ┃ ┣ 📜face_detection.py
  ┃ ┣ 📜gaze_estimation.py
  ┃ ┣ 📜head_pose_estimation.py
  ┃ ┣ 📜input_feeder.py
  ┃ ┣ 📜landmarks_detection.py
  ┃ ┣ 📜main.py
- ┃ ┗ 📜mouse_controller.py
+ ┃ ┣ 📜mouse_controller.py
+ ┃ ┗ stats.txt
  ┃ 
  ┣ 📜README.md
  ┣ 📜models.txt
@@ -111,7 +102,8 @@ Step 1:  Go back to the project directory src folder
 Step 2: Run below commands to execute the project
  * Run on CPU
  ```
-python src/main.py -fd models/intel/face-detection-adas-binary-0001/FP32-INT1/face-detection-adas-binary-0001 -hp models/intel/head-pose-estimation-adas-0001/FP16/head-pose-estimation-adas-0001 -fl models/intel/landmarks-regression-retail-0009/FP16/landmarks-regression-retail-0009 -ge models/intel/gaze-estimation-adas-0002/FP16/gaze-estimation-adas-0002 -d CPU -i bin/demo.mp4
+python src/main.py -fd models/intel/face-detection-adas-binary-0001/INT1/face-detection-adas-binary-0001.xml -hp models/intel/head-pose-estimation-adas-0001/FP16/head-pose-estimation-adas-0001.xml -fl models/intel/landmarks-regression-retail-0009/FP16/landmarks-regression-retail-0009.xml -ge models/intel/gaze-estimation-adas-0002/FP16/gaze-estimation-adas-0002.xml -d CPU -i bin/demo.mp4 -flags fd fl hp ge
+
 ```
 * Run on GPU
  ```
@@ -138,22 +130,22 @@ Argument|Type|Description
 -i| Required | Path to image or video file or WEBCAM.
 -o| Optional | Specify path of output folder where we will store result.
 -l| Optional | Absolute path to a shared library with the kernels impl.
--pt  | Optional | Specify confidence threshold which the value here in range(0, 1), default=0.5
--flag  | Optional | for see the visualization of different model outputs of each frame.
+-prod  | Optional | Specify confidence threshold which the value here in range(0, 1), default=0.6
+-flags  | Optional | for see the visualization of different model outputs of each frame.
 -d | Optional | Provide the target device: CPU / GPU / VPU / FPGA
 
 
 ## Benchmarks
  Include the benchmark results of running your model on multiple hardwares and multiple model precisions. Your benchmarks can include: model loading time, input/output processing time, model inference time etc.
- The Performance tests were run on HP Laptop with **Intel i5-450M 2.40Ghz** and **16 GB Ram**
+ The Performance tests were run on HP Laptop with **Intel i3-3110M 2.40Ghz** and **16 GB Ram**
 
 #### CPU
 
-| Properties       | FP32        | FP16        | INT8        |
-| ---------------- | ----------- | ----------- | ----------- |
-| *Model Loading*  | 2.864s      | 2.845s      | 2.881s      |
-| *Inference Time* | 9.0842s     | 9.002s      | 9.015s      |
-| *Total FPS*      | 1.245fps    | 2.665fps    | 2.135fps    |
+| Properties  | FP32        | FP16        | INT8        |
+| ------------| ----------- | ----------- | ----------- |
+|Model Loading| 2.864s      | 2.845s      | 2.881s      |
+|Infer Time   | 9.0842s     | 9.002s      | 9.015s      |
+|FPS          | 1.245fps    | 2.665fps    | 2.135fps    |
 
 ## Results
 We notice the models with low precisions generally tend to give better inference time, but it still difficult to give an exact measures as the time spent depend of the performance of the machine used in that given time when running the application. Also we notice that there isn't a big difference between the same model with different precisions.
