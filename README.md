@@ -105,6 +105,8 @@ Step 2: Run below commands to execute the project
 python src/main.py -fd models/intel/face-detection-adas-binary-0001/INT1/face-detection-adas-binary-0001.xml -hp models/intel/head-pose-estimation-adas-0001/FP16/head-pose-estimation-adas-0001.xml -fl models/intel/landmarks-regression-retail-0009/FP16/landmarks-regression-retail-0009.xml -ge models/intel/gaze-estimation-adas-0002/FP16/gaze-estimation-adas-0002.xml -d CPU -i bin/demo.mp4 -flags fd fl hp ge
 
 ```
+![Gameplay Screenshot](./bin/assets/image.png)
+
 * Run on GPU
  ```
 python src/main.py -fd <Face detection model name directory> -fl <Facial landmark detection model name directory> -hp <head pose estimation model name directory> -ge <Gaze estimation model name directory> -i <input video directory> -d GPU
